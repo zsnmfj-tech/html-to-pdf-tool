@@ -4,26 +4,25 @@
 
 ## 功能特点
 
-- **高保真转换**: 完整保留 HTML 中的字体、段落、排版布局和图片。
-- **资源自动加载**: 自动识别并加载本地相对路径的 CSS、图片和字体资源。
-- **媒体类型支持**: 支持 `print` 和 `screen` 媒体类型转换，确保样式一致性。
-- **灵活配置**: 支持自定义输出路径、基础 URL 和额外 CSS 样式。
-- **简单易用**: 命令行一键转换，支持 Python 模块导入。
+- **Chromium 内核渲染**: 使用 Playwright/Chromium 引擎，确保 PDF 与浏览器看到的视觉效果 100% 一致。
+- **智能预处理**: 自动处理 `data-src` 延迟加载图片，解决微信公众号等平台的图片丢失问题。
+- **路径自动修复**: 自动将相对路径转换为绝对路径，确保本地图片、CSS 和字体完美加载。
+- **高保真排版**: 完整保留复杂的 CSS 布局、字体样式和多媒体内容。
+- **简单易用**: 命令行一键转换，支持自定义等待条件以确保动态内容加载完成。
 
 ## 安装
 
-### 方式一:使用pip安装(推荐)
+### 安装步骤
 
 ```bash
+# 安装 Python 依赖
 pip install -r requirements.txt
+
+# 安装 Chromium 浏览器内核
+playwright install chromium
+
+# 安装工具
 python setup.py install
-```
-
-### 方式二:直接使用脚本
-
-```bash
-pip install weasyprint
-python src/html_to_pdf.py input.html
 ```
 
 ## 使用方法
@@ -42,14 +41,11 @@ html2pdf input.html -o output.pdf
 # 指定基础 URL (用于解析相对路径)
 html2pdf input.html -b http://example.com
 
-# 指定媒体类型 (默认为 print，可选 screen 以保持网页原始观感)
-html2pdf input.html -m screen
+# 指定等待条件 (默认为 networkidle，确保网络请求完成后再转换)
+html2pdf input.html -w networkidle
 
-# 添加额外的 CSS 样式文件
-html2pdf input.html -c style1.css -c style2.css
-
-# 启用详细输出
-html2pdf input.html -v
+# 指定输出路径
+html2pdf input.html -o output.pdf
 
 # 组合使用
 html2pdf input.html -o output.pdf -b ./assets -v

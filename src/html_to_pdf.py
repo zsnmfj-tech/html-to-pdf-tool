@@ -1,118 +1,112 @@
 #!/usr/bin/env python3
 """
-HTML to PDF Converter (Optimized)
-A simple and reusable tool to convert HTML files to PDF format while preserving 
-layout, fonts, and images.
+HTML to PDF Converter (Pro)
+A robust tool to convert HTML files to PDF format using Playwright/Chromium 
+to ensure perfect layout and image preservation.
 """
 
 import argparse
 import sys
 import os
+import asyncio
 from pathlib import Path
-from weasyprint import HTML, CSS
-from weasyprint.text.fonts import FontConfiguration
+from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright
 
 
-def convert_html_to_pdf(input_path, output_path=None, base_url=None, css_files=None, media_type='print'):
+def preprocess_html(input_path):
     """
-    Convert an HTML file to PDF format with high fidelity.
-    
-    Args:
-        input_path (str): Path to the input HTML file
-        output_path (str, optional): Path to the output PDF file
-        base_url (str, optional): Base URL for resolving relative paths
-        css_files (list, optional): List of additional CSS files to apply
-        media_type (str, optional): Media type for CSS (default: 'print')
-    
-    Returns:
-        str: Path to the generated PDF file
+    Preprocess HTML to fix lazy loading images and relative paths.
     """
-    # Validate input file
     input_file = Path(input_path).resolve()
-    if not input_file.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
+    with open(input_file, 'r', encoding='utf-8') as f:
+        soup = BeautifulSoup(f, 'html.parser')
+
+    # 1. Fix lazy loading images (common in WeChat articles)
+    for img in soup.find_all('img'):
+        # If data-src exists but src is missing or placeholder, swap them
+        data_src = img.get('data-src')
+        if data_src:
+            img['src'] = data_src
+            
+    # 2. Convert relative paths to absolute file paths for local resources
+    base_dir = input_file.parent
+    for tag in soup.find_all(['img', 'link', 'script']):
+        attr = 'src' if tag.name in ['img', 'script'] else 'href'
+        val = tag.get(attr)
+        if val and not val.startswith(('http://', 'https://', 'data:', 'file://')):
+            # It's a relative path
+            abs_path = (base_dir / val).resolve()
+            if abs_path.exists():
+                tag[attr] = abs_path.as_uri()
+
+    # Save to a temporary file
+    temp_file = input_file.parent / f"temp_{input_file.name}"
+    with open(temp_file, 'w', encoding='utf-8') as f:
+        f.write(str(soup))
     
-    # Determine output path
+    return temp_file
+
+
+async def convert_html_to_pdf_playwright(input_path, output_path=None, wait_until='networkidle'):
+    """
+    Convert HTML to PDF using Playwright for maximum fidelity.
+    """
+    input_file = Path(input_path).resolve()
+    
+    # Preprocess to fix images
+    temp_html = preprocess_html(input_file)
+    
     if output_path is None:
         output_path = input_file.with_suffix('.pdf')
     else:
         output_path = Path(output_path).resolve()
     
-    # Create output directory if it doesn't exist
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(viewport={'width': 1280, 'height': 800})
+        page = await context.new_page()
+        
+        # Navigate to the temporary file
+        await page.goto(temp_html.as_uri(), wait_until=wait_until)
+        
+        # Give a little extra time for any remaining lazy loads or animations
+        await asyncio.sleep(2)
+        
+        # Generate PDF
+        await page.pdf(
+            path=str(output_path),
+            format='A4',
+            print_background=True,
+            margin={'top': '1cm', 'bottom': '1cm', 'left': '1cm', 'right': '1cm'}
+        )
+        
+        await browser.close()
     
-    # Set base URL if not provided (use input file's directory)
-    if base_url is None:
-        base_url = input_file.parent.as_uri()
-    elif not base_url.startswith(('http://', 'https://', 'file://')):
-        base_url = Path(base_url).resolve().as_uri()
-    
-    # Font configuration for better font handling
-    font_config = FontConfiguration()
-    
-    # Load HTML
-    html = HTML(filename=str(input_file), base_url=base_url, media_type=media_type)
-    
-    # Load additional CSS files if provided
-    stylesheets = []
-    if css_files:
-        for css_file in css_files:
-            css_path = Path(css_file).resolve()
-            if css_path.exists():
-                stylesheets.append(CSS(filename=str(css_path), font_config=font_config))
-            else:
-                print(f"Warning: CSS file not found: {css_file}", file=sys.stderr)
-    
-    # Convert to PDF with optimized settings
-    # We use presentational_hints=True to support some legacy HTML attributes
-    html.write_pdf(
-        str(output_path), 
-        stylesheets=stylesheets, 
-        font_config=font_config,
-        presentational_hints=True
-    )
-    
+    # Clean up temp file
+    if temp_html.exists():
+        temp_html.unlink()
+        
     return str(output_path)
 
 
 def main():
-    """Main entry point for the command-line interface."""
-    parser = argparse.ArgumentParser(
-        description='Convert HTML files to PDF format with high fidelity',
-        formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    
+    parser = argparse.ArgumentParser(description='Convert HTML to PDF with high fidelity using Chromium')
     parser.add_argument('input', help='Path to the input HTML file')
     parser.add_argument('-o', '--output', help='Path to the output PDF file')
-    parser.add_argument('-b', '--base-url', help='Base URL for resolving relative paths')
-    parser.add_argument('-c', '--css', action='append', dest='css_files', help='Additional CSS file')
-    parser.add_argument('-m', '--media-type', default='print', help='Media type (print or screen)')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('-w', '--wait', default='networkidle', help='Wait condition (load, domcontentloaded, networkidle)')
     
     args = parser.parse_args()
     
     try:
-        if args.verbose:
-            print(f"Converting {args.input} to PDF...")
-            print(f"Base URL: {args.base_url or 'Auto-detected'}")
-            print(f"Media Type: {args.media_type}")
-        
-        output_file = convert_html_to_pdf(
-            args.input,
-            args.output,
-            args.base_url,
-            args.css_files,
-            args.media_type
-        )
-        
+        print(f"Converting {args.input} to PDF using Chromium...")
+        output_file = asyncio.run(convert_html_to_pdf_playwright(args.input, args.output, args.wait))
         print(f"✓ Successfully converted to: {output_file}")
         return 0
-        
     except Exception as e:
         print(f"✗ Error: {e}", file=sys.stderr)
-        import traceback
-        if args.verbose:
-            traceback.print_exc()
         return 1
 
 
