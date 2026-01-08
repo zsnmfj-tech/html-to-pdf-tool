@@ -4,11 +4,11 @@
 
 ## 功能特点
 
-- **简单易用**:命令行一键转换HTML文件为PDF
-- **灵活配置**:支持自定义输出路径、基础URL和额外CSS样式
-- **完整支持**:支持HTML5、CSS3和本地资源(图片、字体等)
-- **跨平台**:基于WeasyPrint,支持Windows、macOS和Linux
-- **可编程**:既可作为命令行工具,也可作为Python模块使用
+- **高保真转换**: 完整保留 HTML 中的字体、段落、排版布局和图片。
+- **资源自动加载**: 自动识别并加载本地相对路径的 CSS、图片和字体资源。
+- **媒体类型支持**: 支持 `print` 和 `screen` 媒体类型转换，确保样式一致性。
+- **灵活配置**: 支持自定义输出路径、基础 URL 和额外 CSS 样式。
+- **简单易用**: 命令行一键转换，支持 Python 模块导入。
 
 ## 安装
 
@@ -39,10 +39,13 @@ html2pdf input.html
 # 指定输出文件名
 html2pdf input.html -o output.pdf
 
-# 指定基础URL(用于解析相对路径)
+# 指定基础 URL (用于解析相对路径)
 html2pdf input.html -b http://example.com
 
-# 添加额外的CSS样式文件
+# 指定媒体类型 (默认为 print，可选 screen 以保持网页原始观感)
+html2pdf input.html -m screen
+
+# 添加额外的 CSS 样式文件
 html2pdf input.html -c style1.css -c style2.css
 
 # 启用详细输出
